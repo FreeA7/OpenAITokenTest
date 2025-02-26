@@ -6,7 +6,7 @@ import json
 
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
-import openai
+from openai import OpenAI
 
 # -----------------------
 # Flask 应用及数据库配置
@@ -40,6 +40,7 @@ class APICall(db.Model):
     reply = db.Column(db.Text, nullable=True)
     prompt_tokens = db.Column(db.Integer, nullable=True)
     completion_tokens = db.Column(db.Integer, nullable=True)
+    total_tokens = db.Column(db.Integer, nullable=True)
     call_duration = db.Column(db.Float, nullable=False)
     error_flag = db.Column(db.Integer, nullable=False, default=0)
     call_time = db.Column(db.DateTime, nullable=False)
@@ -74,20 +75,20 @@ def call_openai():
         return jsonify({'error': '缺少必要参数'}), 400
 
     # 设置 OpenAI API 密钥
-    openai.api_key = api_key
+    client = OpenAI(api_key=api_key)
 
     # 记录开始时间
     start_time = time.time()
     try:
         if response_format == 'json':
-            response = openai.ChatCompletion.create(
+            response = client.chat.completions.create(
                 model=model_name,
                 messages=messages,
                 temperature=temperature,
                 response_format={"type": "json_object"}
             )
         elif response_format == 'text':
-            response = openai.ChatCompletion.create(
+            response = client.chat.completions.create(
                 model=model_name,
                 messages=messages,
                 temperature=temperature,
@@ -102,16 +103,17 @@ def call_openai():
     duration = time.time() - start_time
 
     # 解析 API 返回结果
-    reply = response.choices[0].message.get('content', '')
-    prompt_tokens = response.get('usage', {}).get('prompt_tokens', 0)
-    completion_tokens = response.get('usage', {}).get('completion_tokens', 0)
+    reply = response.choices[0].message.content
+    prompt_tokens = response.usage.prompt_tokens
+    completion_tokens = response.usage.completion_tokens
+    total_tokens = response.usage.total_tokens
 
     # 使用正则表达式检查 reply 中换行符连续出现4个或以上
     error_flag = 1 if re.search(r'[\n\r]{4,}', reply) else 0
 
     # 使用 SQLAlchemy 保存调用记录（确保中文以 utf-8 编码存储）
     call_record = APICall(
-        uuid=uuid_val,
+        uuid=uuid,
         messages=json.dumps(messages, ensure_ascii=False),
         model=model_name,
         response_format=response_format,
@@ -137,6 +139,7 @@ def call_openai():
     logger.info(f"[{uuid}]API调用记录 IP: {request.remote_addr}, 时长: {duration}秒, error_flag: {error_flag}")
     logger.info(f"[{uuid}]Prompt_tokens: {prompt_tokens}")
     logger.info(f"[{uuid}]completion_tokens: {completion_tokens}")
+    logger.info(f"[{uuid}]total_tokens: {total_tokens}")
 
     # 返回 OpenAI 的部分返回值及调用信息
     return jsonify({
