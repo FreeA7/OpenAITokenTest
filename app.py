@@ -61,11 +61,16 @@ def call_openai():
     api_key = data.get('api_key')
     messages = data.get('messages')
     model_name = data.get('model')
-    response_format = data.get('response_format')
-    uuid_val = data.get('uuid')
+    response_format = data.get('response_format', 'text')
+    uuid = data.get('uuid')
     temperature = data.get('temperature', 1.0)
 
-    if not all([api_key, messages, model_name, response_format, uuid_val]):
+    logger.info(f"[{uuid}]********** Start **********")
+    logging.info(
+        f'[{uuid}]Get a chat request from ip: {request.remote_addr}, model: {model_name}, response_format: {response_format}, temperature: {temperature}')
+
+    if not all([api_key, messages, model_name, response_format, uuid]):
+        logger.error(f"[{uuid}]缺少必要参数")
         return jsonify({'error': '缺少必要参数'}), 400
 
     # 设置 OpenAI API 密钥
@@ -74,13 +79,23 @@ def call_openai():
     # 记录开始时间
     start_time = time.time()
     try:
-        response = openai.ChatCompletion.create(
-            model=model_name,
-            messages=messages,
-            temperature=temperature,
-        )
+        if response_format == 'json':
+            response = openai.ChatCompletion.create(
+                model=model_name,
+                messages=messages,
+                temperature=temperature,
+                response_format={"type": "json_object"}
+            )
+        elif response_format == 'text':
+            response = openai.ChatCompletion.create(
+                model=model_name,
+                messages=messages,
+                temperature=temperature,
+            )
+        else:
+            raise AttributeError('Error response_format')
     except Exception as e:
-        logger.error("调用 OpenAI API 失败: %s", str(e))
+        logger.error(f"[{uuid}]调用 OpenAI API 失败: {str(e)}")
         return jsonify({'error': '调用 OpenAI API 失败', 'details': str(e)}), 500
 
     # 记录调用时长
@@ -114,13 +129,14 @@ def call_openai():
         db.session.add(call_record)
         db.session.commit()
     except Exception as e:
-        logger.error("数据库错误: %s", str(e))
+        logger.error(f"[{uuid}]数据库错误: {str(e)}")
         db.session.rollback()
         return jsonify({'error': '数据库错误', 'details': str(e)}), 500
 
     # 打印日志
-    logger.info("API调用记录 UUID %s, IP: %s, 时长: %.2f秒, error_flag: %d",
-                uuid_val, request.remote_addr, duration, error_flag)
+    logger.info(f"[{uuid}]API调用记录 IP: {request.remote_addr}, 时长: {duration}秒, error_flag: {error_flag}")
+    logger.info(f"[{uuid}]Prompt_tokens: {prompt_tokens}")
+    logger.info(f"[{uuid}]completion_tokens: {completion_tokens}")
 
     # 返回 OpenAI 的部分返回值及调用信息
     return jsonify({
