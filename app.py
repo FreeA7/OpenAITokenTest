@@ -21,6 +21,7 @@ db = SQLAlchemy(app)
 # 日志配置（utf-8编码）
 # -----------------------
 logging.basicConfig(
+    filename='./root.log',
     level=logging.INFO,
     format='%(asctime)s [PID %(process)d] [Thread %(thread)d] %(module)s:%(lineno)d %(levelname)s: %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S', encoding='utf-8'
@@ -121,6 +122,7 @@ def call_openai():
         reply=reply,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
         call_duration=duration,
         error_flag=error_flag,
         call_time=datetime.datetime.utcnow(),
@@ -146,6 +148,7 @@ def call_openai():
         'reply': reply,
         'prompt_tokens': prompt_tokens,
         'completion_tokens': completion_tokens,
+        'total_tokens': total_tokens,
         'call_duration': duration,
         'error_flag': error_flag,
     })
